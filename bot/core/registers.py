@@ -10,4 +10,4 @@ def register_handlers(
     """
     Register Handlers with Instance of Classes
     """
-    dp.message.register(handlers.handle_text_input, lambda message: message.content_type == types.ContentType.TEXT)
+    dp.channel_post.register(handlers.handle_text_input, lambda message: message.content_type == types.ContentType.TEXT)

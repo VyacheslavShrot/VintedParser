@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from starlette.responses import JSONResponse
 
+from bot.config.settings import on_startup, on_shutdown
 from web.core.urls import register_routes
 
 # Create Web APP FastAPI
@@ -36,10 +37,27 @@ class AppDefaultHandler:
             }
         )
 
+    @staticmethod
+    async def startup():
+        """
+        Connect To DataBase and Bot WebHook
+        """
+        await on_startup(app)
+
+    @staticmethod
+    async def shutdown():
+        """
+        Disconnect To DataBase and Bot WebHook
+        """
+        await on_shutdown(app)
+
 
 app_default_handler: AppDefaultHandler = AppDefaultHandler()
 
 app.add_exception_handler(HTTPException, app_default_handler.custom_http_exception_handler)
+
+app.add_event_handler("startup", app_default_handler.startup)
+app.add_event_handler("shutdown", app_default_handler.shutdown)
 
 # Register Another Routes
 register_routes(app)
