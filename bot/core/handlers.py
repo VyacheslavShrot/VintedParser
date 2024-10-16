@@ -5,7 +5,6 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-import requests
 
 from bot.config.logger import logger
 
@@ -20,6 +19,10 @@ class Handlers:
         if cls._instance:
             raise Exception("Only one instance of Handlers can be created.")
 
+    def __init__(self):
+        super().__init__()
+        self.task = None
+
     async def handle_text_input(
             self,
             message: Message
@@ -29,19 +32,41 @@ class Handlers:
         :param message: Default Aiogram Telegram Message
         :type message: Message
         """
+        logger.info("\n----Text Input Handler is Starting")
+        try:
+            if self.task and message.text == "стоп":
+                self.task.cancel()
+                await message.answer("Остановка обработки.")
+
+                try:
+                    await self.task
+                except asyncio.CancelledError:
+                    logger.info("Parsing task was cancelled.")
+
+                self.task = None
+
+            elif not self.task and message.text != "стоп":
+                self.task = asyncio.create_task(self.run_parsing(message))
+
+        except Exception as e:
+            logger.error(
+                f"An unexpected error in Text Input Handler | {e}"
+            )
+
+    async def run_parsing(
+            self,
+            message
+    ):
         browser = None
 
-        logger.info("\n----Text Input Handler is Starting")
+        logger.info("\n----Task is Starting")
         try:
             options = webdriver.ChromeOptions()
             options.add_argument('--headless')
             browser = webdriver.Chrome(options=options)
             logger.info("success connect to local browser")
 
-            # start_url = 'https://www.vinted.pl/catalog?search_text=&brand_ids[]=73306&search_id=17785961064&order=newest_first&time=1729020473'
-
             start_url = message.text
-            logger.info(f"{start_url}")
 
             browser.get(start_url)
 
@@ -63,24 +88,41 @@ class Handlers:
                 item_boxes = browser.find_elements(By.CLASS_NAME, 'new-item-box__container')
 
                 try:
-                    for box in item_boxes[:5]:
+                    for box in item_boxes[:7]:
                         unique_id = box.get_attribute('data-testid')
 
                         if unique_id not in existed_boxes:
                             existed_boxes.append(unique_id)
 
+                            """
+                            Get URL of Item
+                            """
                             link = box.find_element(By.CSS_SELECTOR, '.new-item-box__overlay.new-item-box__overlay--clickable')
                             href = link.get_attribute('href')
 
+                            """
+                            Get Size of Item
+                            """
+                            size_boxes = box.find_elements(By.CLASS_NAME, 'new-item-box__description')
+                            size_element = size_boxes[1].find_element(By.CSS_SELECTOR, '.web_ui__Text__text.web_ui__Text__caption.web_ui__Text__left')
+                            size = size_element.text
+
+                            """
+                            Get Images of Item
+                            """
                             images = box.find_elements(By.CLASS_NAME, 'web_ui__Image__content')
                             src_list = [img.get_attribute('src') for img in images if img.get_attribute('src')]
+                            src_list.pop(0)
 
+                            """
+                            Get Price of Item
+                            """
                             price = box.find_element(
                                 By.CSS_SELECTOR, '.web_ui__Text__text.web_ui__Text__caption.web_ui__Text__left.web_ui__Text__muted'
                             )
 
-                            if href and images and price.text:
-                                response = f"{href}\n{price.text}"
+                            if href and images and price.text and size:
+                                response = f"{price.text}\n{size}\n\n{href}"
 
                                 if len(src_list) == 1:
                                     await message.answer_photo(src_list[0], caption=response)
@@ -94,9 +136,11 @@ class Handlers:
                     logger.error(f"Error occurred while iterate in boxes | {e}")
                     continue
 
+                await asyncio.sleep(3)
+
                 browser.refresh()
         except Exception as e:
             logger.error(
-                f"An unexpected error in Text Input Handler | {e}"
+                f"An unexpected error in Task | {e}"
             )
             browser.close()
