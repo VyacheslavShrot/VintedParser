@@ -72,14 +72,14 @@ class Handlers:
             browser.get(start_url)
 
             logger.info("1111")
-            WebDriverWait(browser, 25).until(
-                EC.presence_of_element_located((By.ID, 'onetrust-accept-btn-handler'))
-            )
-
-            logger.info("Before Click Cookie Button")
-            button_cookie = browser.find_element(By.ID, 'onetrust-accept-btn-handler')
-            if button_cookie.is_displayed() and button_cookie.is_enabled():
-                button_cookie.click()
+            # WebDriverWait(browser, 25).until(
+            #     EC.presence_of_element_located((By.ID, 'onetrust-accept-btn-handler'))
+            # )
+            #
+            # logger.info("Before Click Cookie Button")
+            # button_cookie = browser.find_element(By.ID, 'onetrust-accept-btn-handler')
+            # if button_cookie.is_displayed() and button_cookie.is_enabled():
+            #     button_cookie.click()
 
             logger.info("After Click Cookie Button")
             existed_boxes: list = []
