@@ -72,7 +72,7 @@ class Handlers:
             browser.get(start_url)
 
             logger.info("1111")
-            WebDriverWait(browser, 10).until(
+            WebDriverWait(browser, 25).until(
                 EC.presence_of_element_located((By.ID, 'onetrust-accept-btn-handler'))
             )
 
