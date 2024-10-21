@@ -23,6 +23,8 @@ class Handlers:
         super().__init__()
         self.task = None
 
+        self.task_2 = None
+
     async def handle_text_input(
             self,
             message: Message
@@ -33,9 +35,15 @@ class Handlers:
         :type message: Message
         """
         logger.info("\n----Text Input Handler is Starting")
+        print(len(message.text.split(" ")))
         try:
-            if self.task and message.text == "стоп":
-                self.task.cancel()
+            if (self.task or self.task_2) and message.text == "стоп":
+                if self.task:
+                    self.task.cancel()
+
+                if self.task_2:
+                    self.task_2.cancel()
+
                 await message.answer("Остановка обработки.")
 
                 try:
@@ -45,8 +53,19 @@ class Handlers:
 
                 self.task = None
 
-            elif not self.task and message.text != "стоп":
-                self.task = asyncio.create_task(self.run_parsing(message))
+            elif (not self.task or not self.task_2) and message.text != "стоп":
+                if message.text.startswith("https://www.vinted.pl"):
+                    if not self.task:
+                        if len(message.text.split(" ")) == 1:
+                            self.task = asyncio.create_task(self.run_parsing(message))
+                        elif len(message.text.split(" ")) == 2:
+                            self.task = asyncio.create_task(self.run_parsing(message, True))
+
+                    elif not self.task_2:
+                        if len(message.text.split(" ")) == 1:
+                            self.task_2 = asyncio.create_task(self.run_parsing(message))
+                        elif len(message.text.split(" ")) == 2:
+                            self.task_2 = asyncio.create_task(self.run_parsing(message, True))
 
         except Exception as e:
             logger.error(
@@ -55,7 +74,8 @@ class Handlers:
 
     async def run_parsing(
             self,
-            message
+            message,
+            links: bool = None
     ):
         browser = None
 
@@ -66,9 +86,10 @@ class Handlers:
             browser = webdriver.Chrome(options=options)
             logger.info("success connect to local browser")
 
-            start_url = message.text
+            if not links:
+                start_url = message.text
 
-            browser.get(start_url)
+                browser.get(start_url)
 
             # WebDriverWait(browser, 25).until(
             #     EC.presence_of_element_located((By.ID, 'onetrust-accept-btn-handler'))
@@ -82,67 +103,135 @@ class Handlers:
             existed_boxes: list = []
 
             while True:
-                WebDriverWait(browser, 10).until(
-                    EC.presence_of_all_elements_located((By.CLASS_NAME, 'new-item-box__container'))
-                )
+                if links:
+                    for query in message.text.split(" "):
+                        query: str  # Link of Vinted URL with Specific Category
+                        if not query.startswith("https://www.vinted.pl"):
+                            continue
 
-                item_boxes = browser.find_elements(By.CLASS_NAME, 'new-item-box__container')
+                        browser.get(query)
 
-                try:
-                    for box in item_boxes[:7]:
-                        unique_id = box.get_attribute('data-testid')
+                        WebDriverWait(browser, 10).until(
+                            EC.presence_of_all_elements_located((By.CLASS_NAME, 'new-item-box__container'))
+                        )
 
-                        if unique_id not in existed_boxes:
-                            existed_boxes.append(unique_id)
+                        item_boxes = browser.find_elements(By.CLASS_NAME, 'new-item-box__container')
 
-                            """
-                            Get URL of Item
-                            """
-                            link = box.find_element(By.CSS_SELECTOR, '.new-item-box__overlay.new-item-box__overlay--clickable')
-                            href = link.get_attribute('href')
+                        try:
+                            for box in item_boxes[:7]:
+                                unique_id = box.get_attribute('data-testid')
 
-                            """
-                            Get Size of Item
-                            """
-                            size_boxes = box.find_elements(By.CLASS_NAME, 'new-item-box__description')
-                            size_element = size_boxes[1].find_element(By.CSS_SELECTOR, '.web_ui__Text__text.web_ui__Text__caption.web_ui__Text__left')
-                            size = size_element.text
+                                if unique_id not in existed_boxes:
+                                    existed_boxes.append(unique_id)
 
-                            """
-                            Get Images of Item
-                            """
-                            images = box.find_elements(By.CLASS_NAME, 'web_ui__Image__content')
-                            src_list = [img.get_attribute('src') for img in images if img.get_attribute('src')]
-                            src_list.pop(0)
+                                    """
+                                    Get URL of Item
+                                    """
+                                    link = box.find_element(By.CSS_SELECTOR, '.new-item-box__overlay.new-item-box__overlay--clickable')
+                                    href = link.get_attribute('href')
 
-                            """
-                            Get Price of Item
-                            """
-                            price = box.find_element(
-                                By.CSS_SELECTOR, '.web_ui__Text__text.web_ui__Text__caption.web_ui__Text__left.web_ui__Text__muted'
-                            )
+                                    """
+                                    Get Size of Item
+                                    """
+                                    size_boxes = box.find_elements(By.CLASS_NAME, 'new-item-box__description')
+                                    size_element = size_boxes[1].find_element(By.CSS_SELECTOR,
+                                                                              '.web_ui__Text__text.web_ui__Text__caption.web_ui__Text__left')
+                                    size = size_element.text
 
-                            if href and images and price.text and size:
-                                response = f"{price.text}\n{size}\n\n{href}"
+                                    """
+                                    Get Images of Item
+                                    """
+                                    images = box.find_elements(By.CLASS_NAME, 'web_ui__Image__content')
+                                    src_list = [img.get_attribute('src') for img in images if img.get_attribute('src')]
+                                    src_list.pop(0)
 
-                                if len(src_list) == 1:
-                                    await message.answer_photo(src_list[0], caption=response)
-                                elif len(src_list) > 1:
-                                    media = [InputMediaPhoto(media=src) for src in src_list]
-                                    media[0].caption = response
-                                    await message.answer_media_group(media)
+                                    """
+                                    Get Price of Item
+                                    """
+                                    price = box.find_element(
+                                        By.CSS_SELECTOR, '.web_ui__Text__text.web_ui__Text__caption.web_ui__Text__left.web_ui__Text__muted'
+                                    )
 
-                                await asyncio.sleep(1)
-                except Exception as e:
-                    logger.error(f"Error occurred while iterate in boxes | {e}")
-                    continue
+                                    if href and images and price.text and size:
+                                        response = f"{price.text}\n{size}\n\n{href}"
 
-                await asyncio.sleep(3)
+                                        if len(src_list) == 1:
+                                            await message.answer_photo(src_list[0], caption=response)
+                                        elif len(src_list) > 1:
+                                            media = [InputMediaPhoto(media=src) for src in src_list]
+                                            media[0].caption = response
+                                            await message.answer_media_group(media)
 
-                browser.refresh()
+                                        await asyncio.sleep(2)
+                        except Exception as e:
+                            logger.error(f"Error occurred while iterate in boxes | {e}")
+                            continue
+                else:
+                    WebDriverWait(browser, 10).until(
+                        EC.presence_of_all_elements_located((By.CLASS_NAME, 'new-item-box__container'))
+                    )
+
+                    item_boxes = browser.find_elements(By.CLASS_NAME, 'new-item-box__container')
+
+                    try:
+                        for box in item_boxes[:7]:
+                            unique_id = box.get_attribute('data-testid')
+
+                            if unique_id not in existed_boxes:
+                                existed_boxes.append(unique_id)
+
+                                """
+                                Get URL of Item
+                                """
+                                link = box.find_element(By.CSS_SELECTOR, '.new-item-box__overlay.new-item-box__overlay--clickable')
+                                href = link.get_attribute('href')
+
+                                """
+                                Get Size of Item
+                                """
+                                size_boxes = box.find_elements(By.CLASS_NAME, 'new-item-box__description')
+                                size_element = size_boxes[1].find_element(By.CSS_SELECTOR, '.web_ui__Text__text.web_ui__Text__caption.web_ui__Text__left')
+                                size = size_element.text
+
+                                """
+                                Get Images of Item
+                                """
+                                images = box.find_elements(By.CLASS_NAME, 'web_ui__Image__content')
+                                src_list = [img.get_attribute('src') for img in images if img.get_attribute('src')]
+                                src_list.pop(0)
+
+                                """
+                                Get Price of Item
+                                """
+                                price = box.find_element(
+                                    By.CSS_SELECTOR, '.web_ui__Text__text.web_ui__Text__caption.web_ui__Text__left.web_ui__Text__muted'
+                                )
+
+                                if href and images and price.text and size:
+                                    response = f"{price.text}\n{size}\n\n{href}"
+
+                                    if len(src_list) == 1:
+                                        await message.answer_photo(src_list[0], caption=response)
+                                    elif len(src_list) > 1:
+                                        media = [InputMediaPhoto(media=src) for src in src_list]
+                                        media[0].caption = response
+                                        await message.answer_media_group(media)
+
+                                    await asyncio.sleep(1)
+                    except Exception as e:
+                        logger.error(f"Error occurred while iterate in boxes | {e}")
+                        continue
+
+                    await asyncio.sleep(3)
+
+                    browser.refresh()
 
         except Exception as e:
             logger.error(
                 f"An unexpected error in Task | {e}"
             )
             browser.close()
+
+            self.task = asyncio.create_task(self.run_parsing(message))
+
+
